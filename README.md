@@ -1,4 +1,4 @@
-# starter_folder
+# Repository for employment training program study
 
 This repo contains files for the paper "The Effect of Employee Training Programs on Employee Income".
 
