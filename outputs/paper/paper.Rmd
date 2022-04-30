@@ -1,0 +1,315 @@
+---
+title: "The Effect of Employee Training Programs on Employee Income"
+author: "Siyi Liu"
+date: 2022/04/30
+output:
+  bookdown::pdf_document2: default
+bibliography: references.bib
+nocite: '@*'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, message = F, warning = F)
+options(scipen=999)
+library(arm)
+library(kableExtra)
+library(broom)
+library(knitr)
+library(tidyverse)
+library(cobalt)
+library(gridExtra)
+library(car)
+```
+
+Code and data supporting this analysis is available at: https://github.com/siyiliu1202/Employment-training-program-study
+
+\newpage
+
+# Abstract
+
+Good-quality worker training can help workers secure good jobs, increase the efficiency of businesses and corporations, and enhance productivity in the economy. While worker training programs are constantly encouraged in almost every industry to promote worker engagement and growth, its effect on salary or earnings remains debatable across industries. This analysis examines whether there is an effect of worker training programs on worker's earnings. We analyzed the Lalonde dataset and used propensity score matching to balance out several variables so we can have a more causal conclusion. We used a linear regression model to examine the effect of interest. Our results illustrated that worker training program does not have a statistically significant effect on worker's earnings (P-value = 0.169). We conclude that worker training program does not lead to higher earnings, after controlling for relevant variables. 
+
+Key words: employee training programs, Lalonde dataset, regression analysis, propensity score matching
+
+\newpage
+
+# Introduction
+
+Employee or worker training program is a program that helps employees learn specific knowledge or skills to improve performance in their current roles or future roles [@deutsch1987successful]. Good-quality worker training can help workers secure good jobs, increase the efficiency of businesses and corporations, and enhance productivity in the economy [@bartel1994productivity]. Unfortunately, the United States and Canada support very little worker training, and the training it does support frequently fails to lead to favourable jobs or boost productivity [@deutsch1987successful; @bartel1994productivity; @kluve2012training]. Government policy is not currently up to the challenge, and neither businesses nor employees can solve these problems on their own [@deutsch1987successful]. For this reason, people have been urging for a new kind of policy to ensure that employee or worker training improves the productivity of the workforce and leads to more well-paid jobs [@deutsch1987successful]. However, this is all based on conjecture. While worker training programs are constantly encouraged in almost every industry to promote worker engagement and growth, its effect on salary or earnings remains debatable across industries [@kluve2012training]. 
+
+Current there are a lot of gaps to fill in this particular area from both scientific research and practical implementation points of view. The demand to conduct randomized experiments in the context of manpower training programs, and in analyzing effects based on causality in general, has been a topic of much debate among academic researchers and government policy makers [@deutsch1987successful; @bartel1994productivity].
+ 
+The research question of this analysis is to examine whether there is an impact of worker training programs on worker's earnings. The hypothesis is that worker training programs do not have any impact on worker earnings. We answered the research question and tested the hypothesis by analyzing the Lalonde dataset [@lalonde1986evaluating]. The Lalonde dataset contains demographic and socioeconomic variables such as age, marital status, race, and income on the sample [@lalonde1986evaluating]. This is the first study to evaluate the effect of employment training programs on earnings [@lalonde1986evaluating; @dehejia1999causal]. In this paper, we first describe the data used for the analysis, then we describe the statistical model built for the analysis in detail and present analysis results, and finally discuss our findings and end with concluding remarks. 
+
+\newpage
+
+# Data
+
+*Data collection*
+
+The Lalonde dataset contains data collected from the National Supported Work (NSW) Demonstration and comparison groups drawn from the Current Population Survey (CPS) and the Panel Study of Income Dynamics (PSID) [@lalonde1986evaluating; @dehejia1999causal]. The dataset contains demographic and socioeconomic variables such as age, marital status, race, and income on sampled individuals in the American workforce between 1974 and 1978 [@lalonde1986evaluating; @dehejia1999causal]. The sampled individuals were divided into two groups: one group completed a worker training program designed and sponsored by the 614 government and the other group did not. We accessed and collected the data from package `cobalt` in statistical programming software `R` [@r; @cobalt; @lalonde1986evaluating; @dehejia1999causal]. 
+
+*Data cleaning*
+
+We first checked if there were missing values in the dataset and found no missing values. We then checked if each variable is of the appropriate type and found all variables were of the correct type. We re-ordered the levels of race so that "white" is the reference level. This is so that we can interpret effect sizes in terms of black and Hispanic workers relative to white workers in the analysis later.
+
+```{r}
+# read in the lalonde dataset
+data("lalonde")
+# data cleaning: factorize variable race and remove observations with missing values
+lalonde1 <- lalonde %>% mutate(race = factor(race, levels = c("white", "black", "hispan"))) %>% 
+                        na.omit()
+```
+
+*Variable descriptions*
+
+The following describes each variable used in the analysis:
+
+- **age**: age of the sampled individual, rounded to the nearest integer. It is of continuous type.
+
+- **education**: years of education of the sampled individual, rounded to the nearest integer. It is of continuous type.
+
+- **race**: race of the sampled individual - white, Hispanic or black. It is of categorical (three categories) type.
+
+- **married**: indicates whether the sampled individual was married. It is of binary type (1 if married, 0 if not married).
+
+- **degree**: indicates whether the sampled individual has a college degree. It is of binary type (1 if no degree, 0 if degree).
+
+- **income**: annual income (earnings) in USD of the sampled individual after the worker training program. It is of continuous type. This is the outcome in our analysis.
+
+- **treatment**: indicates whether the sampled individual completed the worker training program. It is of binary type (1 if treated in the National Supported Work Demonstration, 0 if from the Current Population Survey). This is the treatment/ exposure variable in our analysis.
+
+A glimpse of the processed dataset used for the analysis (first 10 rows) is presented in Table \@ref(tab:aaa) in the Appendix.
+
+*Variable summaries - numerical*
+
+```{r}
+# create numerical summaries of employee annual income
+inc <- data.frame(Minimum = min(lalonde1$re78),
+                  Maximum = max(lalonde1$re78),
+                  Mean    = mean(lalonde1$re78),
+                  Median  = median(lalonde1$re78),
+                  SD      = sd(lalonde1$re78),
+                  IQR     = IQR(lalonde1$re78))
+inc <- round(inc, 0) # round income to nearest dollar
+```
+
+Table \@ref(tab:a) displays numerical summaries of annual income. The minimum income is `r inc$Minimum`, the maximum income is `r inc$Maximum`, the mean income is `r inc$Mean`, the median income is `r inc$Median`, the standard deviation is `r inc$SD`, the interquartile range (IQR) is `r inc$IQR`. The range based on the maximum and the minimum is very big and the standard deviation and IQR are also very big, implying that the spread and variability of the distribution of annual income is very big. 
+
+```{r a}
+# create table of numerical summaries of employee annual income
+inc %>% kbl(caption = "Nummerical summaries of employee annual income.", booktabs = T) %>% 
+            kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+*Variable summaries - graphical*
+
+Figure \@ref(fig:b) displays the distribution of annual income by whether the worker completed the training program. The income distribution for those who completed the program is simular to those who did not complete the program. We do see that both distributions are heavily right skewed because of large outliers (high income earners). These outliers and the skewness they induced contribute to the large spread and variability in the income distribution overall and for both groups. 
+
+```{r b, fig.cap = "Distribution of annual income by training program."}
+# create box plot of employee annual income by training program history
+lalonde1 %>% mutate(treatment = ifelse(treat == 1, "Yes", "No")) %>%
+                    ggplot(aes(x=treatment, y=re78)) +
+                    geom_boxplot( fill = "cyan2", color = "black") +
+                    labs(x = "Completed training program", y = "Annual income (in USD)") +
+                    theme(legend.position = "none") + 
+                    theme_bw() 
+```
+
+All analyses in this report were conducted with `R version 4.0.3` [@r]. 
+
+\newpage
+
+# Model
+
+To establish a causal effect of worker training program on worker's earnings, we had to ensure some variables that could affect the relationship of these variables were accounted for by balancing them in the treatment and control groups. We achieved this balance via propensity scores and propensity score matching.
+
+Propensity scores are helpful when trying to draw causal conclusions from observational studies where the treatment was not randomly assigned. Propensity scores are the probabilities of subjects getting assigned to treatment [@imai2004causal]. In a typical observational study, the propensity score is not known, because the treatments were not assigned by the experimenter [@imai2004causal]. In such situation, the propensity scores are often estimated by the fitted values from a logistic regression on treatment using variables that the we wish to control for [@imai2004causal].
+
+In an observational study, the treated and untreated groups are not directly comparable, because they may systematically differ in many variables, especially ones that correlate with the treatment and outcome of interest [@imai2004causal]. The propensity score plays an crucial role in balancing the treatment and control groups to make them comparable [@imai2004causal; @dehejia2002propensity]. It has been demonstrated that treated and untreated subjects with the same propensity scores have identical distributions for all variables used to estimate the propensity score [@dehejia2002propensity]. This "balancing property" means that, if we account for the propensity score when we compare the groups, we have effectively transformed the observational study into a randomized block experiment, where "blocks" are groups of subjects with the same propensity scores [@dehejia2002propensity]. This in turn allows us to draw causal conclusions on the treatment on the outcome [@imai2004causal]. 
+
+In our study, we wished to balance age, years of education, race, marital status and education between the group of subjects that went through the worker training program and the group that did not. This way, any difference in earnings from these two groups would be almost entirely attributable to the worker training program, not other variables. We used a logistic regression model to calculate the propensity scores with the aforementioned variables and fitted a linear regression model to study the relationship between earnings and worker training program using the same variables. To make sure our linear regression model was valid, we ran model diagnostic checks to make sure model assumptions were satisfied and checked if multicollinearity existed among the predictors using the variance inflation factor (VIF) of each predictor [@aiken2012multiple; @tranmer2008multiple]. VIFs greater than 5 signifies multicollinearity existed in the model [@aiken2012multiple; @tranmer2008multiple].  
+
+First we show the equation of the logistic regression model for propensity score matching. 
+
+$$
+\begin{aligned}
+& \log \left(\frac{p}{1-p}\right)  = \beta_0 + \beta_1 X_{\text{age}} + \beta_2 X_{\text{years of education}}  +  \beta_3 X_{\text{race: white}} + \\ 
+& \quad \quad \quad \quad \quad \quad \ \ \  \beta_4X_{\text{married - yes}} +\beta_5X_{\text{degree - no}}
+\end{aligned}
+$$
+
+where
+
+- $p$ is the probability of getting assigned to go through the worker training program.
+
+- The $X's$ denote the covariates in the model. They are what they are named in the above equations.
+
+- $\beta_0$ is the model intercept and is not meaningful in our case since individual 0 years of age does not make sense in this analysis.
+
+- $\beta_1$ is the change in log odds of getting assigned to the worker training program when age increases by one year.
+
+- $\beta_2$ is the change in log odds of getting assigned to the worker training program when years of education increases by one year.
+
+- $\beta_3$ is the difference in log odds of getting assigned to the worker training program for white vs. non-white workers.
+
+- $\beta_4$ is the difference in log odds of getting assigned to the worker training program for married vs. non-married workers.
+
+- $\beta_5$ is the difference in log odds of getting assigned to the worker training program for non-degree vs. degree workers.
+
+Then we show the equation of the linear regression model for the outcome (earnings). 
+
+$$
+\begin{aligned}
+& Y = \beta_0 + \beta_1 X_{\text{age}} + \beta_2 X_{\text{years of education}}  +  \beta_3 X_{\text{race: white}} + \beta_4X_{\text{married - yes}} +  \\ 
+& \quad \ \  \ \ \beta_5X_{\text{degree - no}} + \beta_6X_{\text{worker training program - yes}} + \epsilon
+\end{aligned}
+$$
+
+where
+
+- $Y$ is the worker's annual income in USD.
+
+- The $X's$ denote the covariates in the model. They are what they are named in the above equations.
+
+- $\beta_0$ is the model intercept and is not meaningful in our case since individual 0 years of age does not make sense in this analysis.
+
+- $\beta_1$ is the change in average worker's income when age increases by one year.
+
+- $\beta_2$ is the change in average worker's income when years of education increases by one year.
+
+- $\beta_3$ is the difference in average worker's income for white vs. non-white workers.
+
+- $\beta_4$ is the difference in average worker's income for married vs. non-married workers.
+
+- $\beta_5$ is the difference in average worker's income for non-degree vs. degree workers.
+
+- $\beta_6$ is the difference in average worker's income for those who completed the worker's training program vs. those who did not.
+
+- $\epsilon$ is the random variation in income unexplained by the model.
+
+\newpage
+
+# Results
+
+Table \@ref(tab:c) displays results from the multiple linear regression model. Only years of education was statistically significant in predicting employee annual income. The rest of the variables, including the worker training program, were not statistically significant. Thus, we did not have sufficient evidence to reject our hypothesis that working training program has no impact on earnings. The results did make sense to us since years of education reflect the level knowledge and skill set a worker possesses and can bring to the role. And higher-paying roles tend to require higher level of education in most industries. The substantial edge higher level and more years of education can provide certainly trump any immediate advantage and benefits any short-term training program can provide. Propensity score matching matched 370 out of 614 individuals and the multiple linear regression model was fitted on these 370 matched individuals. 
+
+```{r }
+# run logistic regression model for propensity score matching
+propensity_score <- glm(treat ~ age + educ + race + married + nodegree, family = binomial,
+                        data = lalonde1)
+# calculate propensity scores from logistic regression model
+lalonde1 <- 
+  augment(propensity_score, 
+          data = lalonde1,
+          type.predict = "response") %>% 
+  dplyr::select(-.resid, -.std.resid, -.hat, -.sigma, -.cooksd) 
+lalonde1 <- 
+  lalonde1 %>% 
+  arrange(.fitted, treat)
+lalonde1$treated <- 
+  if_else(lalonde1$treat == 0, 0, 1)
+lalonde1$treated <- 
+  as.integer(lalonde1$treated)
+
+# match subjects based on propensity scores
+matches <- arm::matching(z = lalonde1$treated, 
+                         score = lalonde1$.fitted)
+lalonde1 <- cbind(lalonde1, matches)
+lalonde1_matched <- 
+  lalonde1 %>% 
+  filter(match.ind != 0) %>% 
+  dplyr::select(-match.ind, -pairs, -treated)
+
+# run multiple linear regression model on matched patients
+propensity_score_regression <- 
+  lm(re78 ~ age + educ + race + married + nodegree + treat, 
+     data = lalonde1_matched)
+```
+
+```{r c}
+# prepare model summaries of multiple linear regression model
+sum_lm <- data.frame(coef = summary(propensity_score_regression)$coefficients[,1],
+                     Se = summary(propensity_score_regression)$coefficients[,2],
+                     p = summary(propensity_score_regression)$coefficients[,4])
+colnames(sum_lm) <- c("Coefficient", "Standard error", "P-value")
+sum_lm <- round(sum_lm, digits = 3)
+# prepare table for model summaries
+sum_lm %>% kbl(caption = "Linear regression model results.", booktabs = T) %>% 
+               kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+In Figure \@ref(fig:d) displays, from the linear regression model, a plot of standardized residuals vs. fitted values and a Normal QQ plot of standardized residuals. The standardized residuals vs. fitted values plot shows that the variability of the residuals increases slightly as fitted value increases, but nothing too serious. We observe some departure from the line on the Normal QQ plot, but the degree of departure from normality was not substantial. In summary, we conclude that the assumptions of the multiple linear regression model were sufficiently satisfied so that model results were reliable and not subject to a substantial amount of bias. The VIFs of all predictors were less than 5, indicating absence of multicollinearity. The VIFs are presented in Table \@ref(tab:bbb) in the Appendix.  
+
+\newpage
+
+```{r d, fig.cap = "Plot of standardized residuals vs. fitted values (left) and Normal Q-Q plot of standardized residuals (right)."}
+# calulate model standardized residuals
+residuals <- rstandard(propensity_score_regression)
+# calculate model fitted  values
+fitted <-  predict(propensity_score_regression)
+# create residuals vs. fitted values plot
+diag <- data.frame(residuals = residuals,
+                   fitted = fitted)
+a <- diag %>% ggplot(aes(x=fitted, y=residuals)) + 
+              geom_point() +
+              geom_hline(yintercept = 0, col = "red") +
+              labs(y = "Standardized residuals", x = "Fitted values") + theme_bw()
+# create normal Q-Q plot of residuals
+b <- diag %>% ggplot(aes(sample = residuals)) + stat_qq() + 
+  stat_qq_line(col = "red") + labs(x = "Theoretical Quantiles", y = "Sample Quantiles") + 
+  theme_bw()
+# position above two plots side by side
+grid.arrange(a,b, nrow=1)
+```
+
+All analyses in this report were conducted with `R version 4.0.3` [@r]. 
+
+\newpage
+
+# Discussion
+
+This report contains an analysis that examines the association between worker training program and worker's earnings, specifically it answers the research question of whether working training program has an impact on worker's earnings. We devised a hypothesis that working training program has no impact on worker earnings.  
+
+We found worker income program did not have a statistically significant relationship with worker's earnings. Thus, we did not have sufficient evidence from our data analysis and model results to reject the hypothesis that working training program. We conclude that completing a worker income program would not lead to higher earnings. 
+
+There were some limitations to our study and analysis. Through propensity score matching, observed variables in the dataset were balanced across treatment and control groups so these would not have any confounding effect on our results and conclusions, that is we could attribute differences in the outcomes entirely to differences in treatment received (completing or not completing the worker income program). But, our causality was not perfect in the sense that other hidden confounding variables not in the analysis dataset, that our propensity score matching did not consider, could have influenced our results and causal inference. Furthermore, propensity score matching only matched 370 out of 614 individuals, so we lost a significant amount of data and the information they brought. 
+
+Next steps would be collecting and combining more datasets so that we could account for more confounders and have a greater sample size after matching. We could also expand our analysis into looking at more than one worker income program to reduce variation in these programs and the impact of such variation on worker's earnings. This would in turn increase the generalizability of our results and conclusions. 
+
+\newpage
+
+# References
+
+<div id="refs"></div>
+
+\newpage
+
+# Appendix 
+
+Glimpse of the analysis dataset:
+
+```{r aaa}
+# glimpse of analysis dataset (first 10 rows)
+lalonde1 %>% head(n=10) %>% dplyr::select(treat, age, educ, race, married, nodegree, re78) %>% 
+                            rename(treatment = treat,
+                                   education = educ,
+                                   degree = nodegree,
+                                   income = re78) %>%
+                            kbl(caption = "First 10 records of the dataset used in the analysis.", 
+                                digits = 0, booktabs = T) %>% 
+                            kable_styling(latex_options = c("striped", "hold_position"))
+```
+
+VIFs of the regression model:
+
+```{r bbb}
+# extract and present VIFs of multiple linear regression model
+df_vif <- data.frame(Variable = rownames(vif(propensity_score_regression)),
+                     VIF = vif(propensity_score_regression)[,1])
+rownames(df_vif) <- NULL
+df_vif %>% kbl(caption = "Variance inflation factors of variables in the multiple linear regression.", 
+               digits = 2, booktabs = T) %>% 
+           kable_styling(latex_options = c("striped", "hold_position"))
+```
+
